@@ -13,7 +13,7 @@ var _ = os.Exit
 var response string
 
 func main() {
-	response := ""
+	response = ""
 
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")

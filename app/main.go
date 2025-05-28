@@ -54,9 +54,11 @@ func main() {
 			contentLength := len(body)
 
 			response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, body)
+		} else {
+			response = "HTTP/1.1 404 Not Found\r\n\r\n"
 		}
 	} else {
-		response = "HTTP/1.1 400 Bad Request\r\n\r"
+		response = "HTTP/1.1 400 Bad Request\r\n\r\n"
 	}
 
 	//response := "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"

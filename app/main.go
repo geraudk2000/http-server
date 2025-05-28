@@ -44,10 +44,19 @@ func main() {
 	requestLine := strings.Split(string(buf[:n]), "\r\n")[0]
 	parts := strings.Split(requestLine, " ")
 
-	if len(parts) >= 2 && parts[1] == "/" {
-		response = "HTTP/1.1 200 OK\r\n\r\n"
+	if len(parts) >= 2 {
+		path := parts[1]
+
+		if path == "/" {
+			response = "HTTP/1.1 200 OK\r\n\r\n"
+		} else if strings.HasPrefix(path, "/echo/") {
+			body := strings.TrimPrefix(path, "/echo/")
+			contentLength := len(body)
+
+			response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, body)
+		}
 	} else {
-		response = "HTTP/1.1 404 Not Found\r\n\r\n"
+		response = "HTTP/1.1 400 Bad Request\r\n\r"
 	}
 
 	//response := "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"

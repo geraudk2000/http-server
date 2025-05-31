@@ -43,7 +43,7 @@ func main() {
 
 	requestLine := strings.Split(string(buf[:n]), "\r\n")[0]
 	parts := strings.Split(requestLine, " ")
-	fmt.Println(string(buf))
+	//fmt.Println(string(buf))
 	if len(parts) >= 2 {
 		path := parts[1]
 
@@ -57,7 +57,7 @@ func main() {
 		} else if strings.HasPrefix(path, "/user-agent") {
 			userAgent := ""
 			lines := strings.Split(string(buf[:n]), "\r\n")
-			fmt.Println(lines)
+			//fmt.Println(lines)
 
 			for _, line := range lines {
 				if strings.HasPrefix(line, "User-Agent:") {

@@ -68,7 +68,6 @@ func handleConnection(conn net.Conn) {
 					response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", contentLength, content)
 				}
 			}
-
 		} else {
 			response = "HTTP/1.1 404 Not Found\r\n\r\n"
 		}

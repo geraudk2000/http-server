@@ -10,11 +10,10 @@ import (
 // Ensures gofmt doesn't remove the "net" and "os" imports above (feel free to remove this!)
 var _ = net.Listen
 var _ = os.Exit
-var response string
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
-
+	var response string
 	buf := make([]byte, 1024)
 
 	n, err := conn.Read(buf)
@@ -60,7 +59,7 @@ func handleConnection(conn net.Conn) {
 }
 
 func main() {
-	response = ""
+	//response = ""
 
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")

@@ -43,7 +43,7 @@ func main() {
 
 	requestLine := strings.Split(string(buf[:n]), "\r\n")[0]
 	parts := strings.Split(requestLine, " ")
-
+	fmt.Println(string(buf))
 	if len(parts) >= 2 {
 		path := parts[1]
 
@@ -54,6 +54,20 @@ func main() {
 			contentLength := len(body)
 
 			response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, body)
+		} else if strings.HasPrefix(path, "/user-agent") {
+			userAgent := ""
+			lines := strings.Split(string(buf[:n]), "\r\n")
+			fmt.Println(lines)
+
+			for _, line := range lines {
+				if strings.HasPrefix(line, "User-Agent:") {
+					userAgent = strings.TrimSpace(strings.TrimPrefix(line, "User-Agent:"))
+					break
+				}
+			}
+			contentLength := len(userAgent)
+			response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, userAgent)
+
 		} else {
 			response = "HTTP/1.1 404 Not Found\r\n\r\n"
 		}

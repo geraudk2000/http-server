@@ -1,15 +1,20 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports above (feel free to remove this!)
 var _ = net.Listen
 var _ = os.Exit
+
+var directory string
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
@@ -46,6 +51,24 @@ func handleConnection(conn net.Conn) {
 			contentLength := len(userAgent)
 			response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, userAgent)
 
+		} else if strings.HasPrefix(path, "/files/") {
+			filename := strings.TrimPrefix(path, "/files/")
+			filePath := filepath.Join(directory, filename)
+			fmt.Println(filePath)
+			file, err := os.Open(filePath)
+			if err != nil {
+				response = "HTTP/1.1 404 Not Found\r\n\r\n"
+			} else {
+				defer file.Close()
+				content, err := io.ReadAll(file)
+				if err != nil {
+					response = "HTTP/1.1 500 Internal Server Error\r\n\r\n"
+				} else {
+					contentLength := len(content)
+					response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", contentLength, content)
+				}
+			}
+
 		} else {
 			response = "HTTP/1.1 404 Not Found\r\n\r\n"
 		}
@@ -63,6 +86,10 @@ func main() {
 
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
+
+	dirFlag := flag.String("directory", ".", "directory to serve files from")
+	flag.Parse()
+	directory = *dirFlag
 
 	// Uncomment this block to pass the first stage
 	l, err := net.Listen("tcp", "0.0.0.0:4221")

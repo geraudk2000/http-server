@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -16,68 +17,106 @@ var _ = os.Exit
 
 var directory string
 
+func respond(conn net.Conn, message string) {
+	conn.Write([]byte(message))
+}
+
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
-	var response string
 	buf := make([]byte, 1024)
-
 	n, err := conn.Read(buf)
 	if err != nil {
 		fmt.Println("Error reading from connection:", err)
+		return
 	}
+
 	requestLine := strings.Split(string(buf[:n]), "\r\n")[0]
 	parts := strings.Split(requestLine, " ")
-	if len(parts) >= 2 {
-		path := parts[1]
+	if len(parts) < 2 {
+		conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n"))
+		return
+	}
+	method := parts[0]
+	path := parts[1]
 
-		if path == "/" {
-			response = "HTTP/1.1 200 OK\r\n\r\n"
-		} else if strings.HasPrefix(path, "/echo/") {
-			body := strings.TrimPrefix(path, "/echo/")
-			contentLength := len(body)
+	switch {
+	case method == "GET" && path == "/":
+		respond(conn, "HTTP/1.1 200 OK\r\n\r\n")
+	case method == "GET" && strings.HasPrefix(path, "/echo/"):
+		body := strings.TrimPrefix(path, "/echo/")
+		contentLength := len(body)
+		respond(conn, fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, body))
+	case method == "GET" && path == "/user-agent":
+		// user-agent response
+		userAgent := ""
+		lines := strings.Split(string(buf[:n]), "\r\n")
 
-			response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, body)
-		} else if strings.HasPrefix(path, "/user-agent") {
-			userAgent := ""
-			lines := strings.Split(string(buf[:n]), "\r\n")
-			//fmt.Println(lines)
-
-			for _, line := range lines {
-				if strings.HasPrefix(line, "User-Agent:") {
-					userAgent = strings.TrimSpace(strings.TrimPrefix(line, "User-Agent:"))
-					break
-				}
+		for _, line := range lines {
+			if strings.HasPrefix(line, "User-Agent:") {
+				userAgent = strings.TrimSpace(strings.TrimPrefix(line, "User-Agent:"))
+				break
 			}
-			contentLength := len(userAgent)
-			response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, userAgent)
+		}
+		contentLength := len(userAgent)
+		respond(conn, fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, userAgent))
 
-		} else if strings.HasPrefix(path, "/files/") {
-			filename := strings.TrimPrefix(path, "/files/")
-			filePath := filepath.Join(directory, filename)
-			fmt.Println(filePath)
+	case strings.HasPrefix(path, "/files/"):
+		filename := strings.TrimPrefix(path, "/files")
+		filePath := filepath.Join(directory, filename)
+
+		if method == "GET" {
 			file, err := os.Open(filePath)
 			if err != nil {
-				response = "HTTP/1.1 404 Not Found\r\n\r\n"
+				respond(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
 			} else {
 				defer file.Close()
 				content, err := io.ReadAll(file)
 				if err != nil {
-					response = "HTTP/1.1 500 Internal Server Error\r\n\r\n"
+					respond(conn, "HTTP/1.1 500 Internal Server Error\r\n\r\n")
 				} else {
 					contentLength := len(content)
-					response = fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", contentLength, content)
+					respond(conn, fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", contentLength, content))
 				}
 			}
-		} else {
-			response = "HTTP/1.1 404 Not Found\r\n\r\n"
+		} else if method == "POST" {
+			// handle file upload
+			headersBody := strings.SplitN(string(buf[:n]), "\r\n\r\n", 2)
+			headers := strings.Split(headersBody[0], "\r\n")
+			body := headersBody[1]
+			contentLength := 0
+
+			for _, line := range headers {
+				if strings.HasPrefix(line, "Content-Length:") {
+					lengthStr := strings.TrimSpace(strings.TrimPrefix(line, "Content-Length:"))
+					contentLength, err = strconv.Atoi(lengthStr)
+					if err != nil {
+						respond(conn, "HTTP/1.1 400 Bad Request\r\n\r\n")
+						return
+					}
+					break
+				}
+			}
+			//fmt.Println(contentLength, body)
+
+			for len(body) < contentLength {
+				moreBuf := make([]byte, contentLength-len(body))
+				m, err := conn.Read(moreBuf)
+				if err != nil {
+					respond(conn, "HTTP/1.1 500 Internal Server Error\r\n\r\n")
+					return
+				}
+				body += string(moreBuf[:m])
+			}
+			err := os.WriteFile(filePath, []byte(body), 0644)
+			if err != nil {
+				respond(conn, "HTTP/1.1 500 Internal Server Error\r\n\r\n")
+			} else {
+				respond(conn, "HTTP/1.1 201 Created\r\n\r\n")
+			}
 		}
-	} else {
-		response = "HTTP/1.1 400 Bad Request\r\n\r\n"
+	default:
+		respond(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
 	}
-
-	//response := "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
-	conn.Write([]byte(response))
-
 }
 
 func main() {

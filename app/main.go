@@ -107,7 +107,9 @@ func handleConnection(conn net.Conn) {
 				}
 				body += string(moreBuf[:m])
 			}
+
 			err := os.WriteFile(filePath, []byte(body), 0644)
+
 			if err != nil {
 				respond(conn, "HTTP/1.1 500 Internal Server Error\r\n\r\n")
 			} else {

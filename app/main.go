@@ -27,12 +27,14 @@ func handleConnection(conn net.Conn) {
 	reader := bufio.NewReader(conn)
 	for {
 		request, err := reader.ReadString('\n')
+
 		if err != nil {
 			if err != io.EOF {
 				fmt.Println("Error reading from connection:", err)
 			}
 			return
 		}
+		//fmt.Println(request)
 
 		// Read the full HTTP request
 		var lines []string
@@ -50,7 +52,7 @@ func handleConnection(conn net.Conn) {
 			}
 			lines = append(lines, line)
 		}
-
+		fmt.Println(lines)
 		requestLine := lines[0]
 		parts := strings.Split(requestLine, " ")
 		if len(parts) < 2 {

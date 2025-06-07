@@ -18,8 +18,12 @@ var _ = os.Exit
 
 var directory string
 
-func respond(conn net.Conn, message string) {
-	conn.Write([]byte(message))
+func respond(conn net.Conn, message string, headers ...string) {
+	headerStr := ""
+	if len(headers) > 0 {
+		headerStr = headers[0]
+	}
+	conn.Write([]byte(message + headerStr))
 }
 
 func handleConnection(conn net.Conn) {
@@ -56,7 +60,7 @@ func handleConnection(conn net.Conn) {
 		requestLine := lines[0]
 		parts := strings.Split(requestLine, " ")
 		if len(parts) < 2 {
-			conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n"))
+			respond(conn, "HTTP/1.1 400 Bad Request", "\r\n\r\n")
 			continue
 		}
 		method := parts[0]
@@ -69,17 +73,24 @@ func handleConnection(conn net.Conn) {
 				break
 			}
 		}
-		if connectionClose {
-			return
-		}
 
 		switch {
 		case method == "GET" && path == "/":
-			respond(conn, "HTTP/1.1 200 OK\r\n\r\n")
+			if connectionClose {
+				respond(conn, "HTTP/1.1 200 OK", "\r\nConnection: close\r\n\r\n")
+				return
+			} else {
+				respond(conn, "HTTP/1.1 200 OK", "\r\n\r\n")
+			}
 		case method == "GET" && strings.HasPrefix(path, "/echo/"):
 			body := strings.TrimPrefix(path, "/echo/")
 			contentLength := len(body)
-			respond(conn, fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, body))
+			if connectionClose {
+				respond(conn, fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d", contentLength), "\r\nConnection: close\r\n\r\n"+body)
+				return
+			} else {
+				respond(conn, fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d", contentLength), "\r\n\r\n"+body)
+			}
 		case method == "GET" && path == "/user-agent":
 			// user-agent response
 			userAgent := ""
@@ -91,7 +102,12 @@ func handleConnection(conn net.Conn) {
 				}
 			}
 			contentLength := len(userAgent)
-			respond(conn, fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d\r\n\r\n%s", contentLength, userAgent))
+			if connectionClose {
+				respond(conn, fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d", contentLength), "\r\nConnection: close\r\n\r\n"+userAgent)
+				return
+			} else {
+				respond(conn, fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %d", contentLength), "\r\n\r\n"+userAgent)
+			}
 
 		case strings.HasPrefix(path, "/files/"):
 			filename := strings.TrimPrefix(path, "/files")
@@ -100,15 +116,30 @@ func handleConnection(conn net.Conn) {
 			if method == "GET" {
 				file, err := os.Open(filePath)
 				if err != nil {
-					respond(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
+					if connectionClose {
+						respond(conn, "HTTP/1.1 404 Not Found", "\r\nConnection: close\r\n\r\n")
+						return
+					} else {
+						respond(conn, "HTTP/1.1 404 Not Found", "\r\n\r\n")
+					}
 				} else {
 					defer file.Close()
 					content, err := io.ReadAll(file)
 					if err != nil {
-						respond(conn, "HTTP/1.1 500 Internal Server Error\r\n\r\n")
+						if connectionClose {
+							respond(conn, "HTTP/1.1 500 Internal Server Error", "\r\nConnection: close\r\n\r\n")
+							return
+						} else {
+							respond(conn, "HTTP/1.1 500 Internal Server Error", "\r\n\r\n")
+						}
 					} else {
 						contentLength := len(content)
-						respond(conn, fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\n\r\n%s", contentLength, content))
+						if connectionClose {
+							respond(conn, fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d", contentLength), "\r\nConnection: close\r\n\r\n"+string(content))
+							return
+						} else {
+							respond(conn, fmt.Sprintf("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d", contentLength), "\r\n\r\n"+string(content))
+						}
 					}
 				}
 			} else if method == "POST" {
@@ -126,8 +157,13 @@ func handleConnection(conn net.Conn) {
 						lengthStr := strings.TrimSpace(strings.TrimPrefix(line, "Content-Length:"))
 						contentLength, err = strconv.Atoi(lengthStr)
 						if err != nil {
-							respond(conn, "HTTP/1.1 400 Bad Request\r\n\r\n")
-							return
+							if connectionClose {
+								respond(conn, "HTTP/1.1 400 Bad Request", "\r\nConnection: close\r\n\r\n")
+								return
+							} else {
+								respond(conn, "HTTP/1.1 400 Bad Request", "\r\n\r\n")
+								return
+							}
 						}
 						break
 					}
@@ -138,8 +174,13 @@ func handleConnection(conn net.Conn) {
 					moreBuf := make([]byte, contentLength-len(body))
 					m, err := reader.Read(moreBuf)
 					if err != nil {
-						respond(conn, "HTTP/1.1 500 Internal Server Error\r\n\r\n")
-						return
+						if connectionClose {
+							respond(conn, "HTTP/1.1 500 Internal Server Error", "\r\nConnection: close\r\n\r\n")
+							return
+						} else {
+							respond(conn, "HTTP/1.1 500 Internal Server Error", "\r\n\r\n")
+							return
+						}
 					}
 					body += string(moreBuf[:m])
 				}
@@ -147,13 +188,28 @@ func handleConnection(conn net.Conn) {
 				err := os.WriteFile(filePath, []byte(body), 0644)
 
 				if err != nil {
-					respond(conn, "HTTP/1.1 500 Internal Server Error\r\n\r\n")
+					if connectionClose {
+						respond(conn, "HTTP/1.1 500 Internal Server Error", "\r\nConnection: close\r\n\r\n")
+						return
+					} else {
+						respond(conn, "HTTP/1.1 500 Internal Server Error", "\r\n\r\n")
+					}
 				} else {
-					respond(conn, "HTTP/1.1 201 Created\r\n\r\n")
+					if connectionClose {
+						respond(conn, "HTTP/1.1 201 Created", "\r\nConnection: close\r\n\r\n")
+						return
+					} else {
+						respond(conn, "HTTP/1.1 201 Created", "\r\n\r\n")
+					}
 				}
 			}
 		default:
-			respond(conn, "HTTP/1.1 404 Not Found\r\n\r\n")
+			if connectionClose {
+				respond(conn, "HTTP/1.1 404 Not Found", "\r\nConnection: close\r\n\r\n")
+				return
+			} else {
+				respond(conn, "HTTP/1.1 404 Not Found", "\r\n\r\n")
+			}
 		}
 	}
 }
